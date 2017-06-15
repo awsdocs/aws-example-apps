@@ -25,9 +25,11 @@ end
 
 USAGE = <<DOC
 
-Usage: ruby PostApp.rb [-t TIMEZONE] [-r REGION] [-d] [-h]
+Usage: ruby PostApp.rb [-r REGION] [-t TIMEZONE] [-n MAXMSGS] [-d] [-h]
 
 If REGION is not supplied, defaults to 'us-west-2'
+If TIMEZONE is not supplied, defaults to 'UTC'
+If MAXMSGS is not supplied, defaults to 20
 
 -d     Display additional information
 -h     Shows this message and quits
@@ -531,8 +533,15 @@ end
 
 
 # main routime starts here
-region = 'us-west-2'
 debug = false
+
+# Get config values from conf.json
+file = File.read 'conf.json'
+data = JSON.parse()
+
+region = data['Region']
+timezone = data['Timezone']
+max_msgs = data['MaxMessages']
 
 i = 0
 
@@ -542,12 +551,20 @@ while i < ARGV.length
       i += 1
       region = ARGV[i]
 
-    when '-h'
-      puts USAGE
-      exit 1
+    when '-t'
+      i += 1
+      timezone = ARGV[i]
+
+    when '-n'
+      i += 1
+      max_msgs = ARGV[i].to_i
 
     when '-d'
       debug = true
+
+    when '-h'
+      puts USAGE
+      exit 0
 
     else
       puts 'Unrecognized option: ' + ARGV[i]
@@ -559,9 +576,6 @@ while i < ARGV.length
 end
 
 cursor = '(anonymous)> '
-
-# Default timezone
-timezone = 'UTC'
 
 # When false, stop the app
 keep_going = true
