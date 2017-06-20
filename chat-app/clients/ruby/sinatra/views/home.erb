@@ -1,0 +1,151 @@
+<!--
+Copyright 2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License").
+You may not use this file except in compliance with the License.
+A copy of the License is located at
+
+http://aws.amazon.com/apache2.0/
+-->
+
+<div id="login" class="login">
+  <% if @status == 'not_logged_in' %>
+    <!-- They aren't logged in (or registered), so offer them login or register -->
+    <p>
+      You must be logged in (or registered, which automatically logs you in)
+      before you can post, delete a post, or delete your account.
+    </p>
+
+    <table class="posts">
+      <colgroup>
+        <col style="width: 33%" />
+        <col style="width: 33%" />
+        <col style="width: 33%" />
+      </colgroup>
+      <tr>
+        <td>
+          <form action="/login" method="POST">
+            Username:
+            <input type="text" name="username">
+            <br>
+            Password:
+            <input type="password" name="password">
+            <br>
+            <br>
+            <input type="submit" value="Log In"/>
+          </form>
+        </td>
+        <td>
+          <form action="/register" method="POST">
+            Username:
+            <input type="text" name="username">
+            <br>
+            Email:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+            <input type="text" name="email">
+            <br>
+            Password:
+            <input type="password" name="password">
+            <br>
+            <br>
+            <input type="submit" value="Register"/>
+          </form>
+        </td>
+        <td>
+          <form action="/reset" method="POST">
+            Username:
+            <input type="text" name="username"/>
+            <br>
+            <br>
+            <input type="submit" value="Reset Password"/>
+          </form>
+        </td>
+      </tr>
+    </table>
+
+  <% elsif @status == 'finish_register' %>
+    <p>
+      Enter your confirmation code and click <b>Submit</b> to finish registering.
+    </p>
+
+    <form action="/register_end" method="POST">
+      Confirmation Code:
+      <input type="text" name="code"/>
+      <br>
+      <br>
+      <input type="submit" value="Submit"/>
+    </form>
+
+  <% elsif @status == 'reset' %>
+    <p>
+      Enter the confirmation code click <b>Submit</b>
+    </p>
+
+    <form action="/reset_end" method="POST">
+      Confirmation Code:
+      <input type="text" name="code"/>
+      <br>
+      <br>
+      <input type="submit" value="Submit"/>
+    </form>
+
+  <% else %>
+    <!-- Thay are logged in, so let them post, delete a post, delete their account, or logout -->
+    <p>
+      <form action="/post" method="POST">
+        <input maxlength=140 type="text" name="message">
+        <br>
+        <br>
+        <input type="submit" value="Post message"/>
+      </form>
+    </p>
+
+    <!-- Buttons for delete post, logout, remove account -->
+
+    <table class="posts">
+      <colgroup>
+        <col style="width: 33%" />
+        <col style="width: 33%" />
+        <col style="width: 33%" />
+      </colgroup>
+      <tr>
+        <td>
+          To delete one of your posts,
+          select the line with your name and the time
+          and click <b>Delete selected Post</b>
+        </td>
+        <td>
+          Click <b>Logout</b> to logout.
+        </td>
+        <td>
+          Click <b>Delete account</b> to delete your account.
+          <br>
+          Note that this is irreversible.
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <form action="/delete" method="POST">
+            <input type="hidden" id="message_id" value="" name ="message_value" />
+            <br>
+            <br>
+            <input type="submit" value="Delete message"/>
+          </form>
+        </td>
+        <td>
+          <form action="/logout" method="POST">
+            <br>
+            <input type="submit" value="Logout"/>
+          </form>
+        </td>
+        <td>
+          <form action="/unregister" method="POST">
+            <br>
+            <input type="submit" value="Delete account"/>
+          </form>
+        </td>
+      </tr>
+    </table>
+
+  <% end %>
+
+</div>

@@ -1,0 +1,93 @@
+<!--
+Copyright 2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License").
+You may not use this file except in compliance with the License.
+A copy of the License is located at
+
+http://aws.amazon.com/apache2.0/
+-->
+
+<!-- Every page shows the posts from layout.erb -->
+
+<% if @status == 'Logged in' %>
+
+  <p>
+    You are already logged in.
+    Redirecting you to the <a href='/'>home page</a> in 5 seconds.
+    <script>
+      setTimeout(function(){location.href="http://"} , 5000);
+    </script>
+  </p>
+
+<% elsif @status == 'Not logged in' %>
+
+  <!-- They aren't logged in (or registered), so offer them login or register -->
+
+    <div id="login" class="login">
+
+    <table class="posts">
+      <colgroup>
+        <col style="width: 33%" />
+        <col style="width: 33%" />
+        <col style="width: 33%" />
+      </colgroup>
+      <tr>
+        <td>
+          <form action="/login" method="POST">
+            Username:
+            <input type="text" name="username">
+            <br>
+            Password:
+            <input type="password" name="password">
+            <br>
+            <br>
+            <br>
+            <input type="submit" value="Log In"/>
+          </form>
+        </td>
+        <td>
+          <form action="/register" method="POST">
+            Username:
+            <input type="text" name="username">
+            <br>
+            Email:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+            <input type="text" name="email">
+            <br>
+            Password:
+            <input type="password" name="password">
+            <br>
+            <br>
+            <input type="submit" value="Register"/>
+          </form>
+        </td>
+        <td>
+          <form action="/reset" method="POST">
+            Username:
+            <input type="text" name="username"/>
+            <br>
+            <br>
+            <br>
+            <br>
+            <input type="submit" value="Reset Password"/>
+          </form>
+        </td>
+      </tr>
+    </table>
+
+  </div>
+
+<% else %>
+  <!-- Bad status, so redirect them to the home page anyway -->
+
+  <p>
+    Unrecognized status for this page.
+    Redirecting you to the <a href='/'>home page</a> in 5 seconds.
+    <script>
+      setTimeout(function(){location.href="http://"} , 5000);
+    </script>
+  </p>
+
+<% end %>
+
+

@@ -1,0 +1,36 @@
+<!--
+Copyright 2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License").
+You may not use this file except in compliance with the License.
+A copy of the License is located at
+
+http://aws.amazon.com/apache2.0/
+-->
+
+<% if @status == 'Resetting' %>
+  <p>
+    Enter the confirmation code click <b>Submit</b>
+  </p>
+
+  <form action="/reset_end" method="POST">
+    Confirmation Code:
+    <input type="text" name="code"/>
+    <br>
+    Password:
+    <input type="password" name="password">
+    <br>
+    <input type="submit" value="Submit"/>
+  </form>
+
+<% else %>
+
+  <p>
+    Unrecognized status for this page.
+    Redirecting you to the <a href='/'>home page</a> in 5 seconds.
+    <script>
+      setTimeout(function(){location.href="http://"} , 5000);
+    </script>
+  </p>
+
+<% end %>
