@@ -2,4 +2,4 @@ Default:
   region: us-west-2
   timezone: UTC
   maxMsgs: 25
-  debug: true
+  debug: false
