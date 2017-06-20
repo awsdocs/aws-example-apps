@@ -1,7 +1,7 @@
-# AWS SDK Docs Chat App in Ruby
+# AWS SDK Docs Chat App in Sinatra
 
-This folder contains the Ruby source code of a Sinatra app that uses the Lambda functions in
-*../../../setup/lambda* to implement a simple Chat app.
+This folder contains the source code of a Sinatra app that uses the Lambda functions in
+*../../../setup/lambda* to implement a simple chat app.
 
 ## Version Info
 
@@ -25,7 +25,7 @@ You can modify the following entries in *config.yml*:
 ## Workflow
 
 1. User navigates to `http://localhost:4567`
-   * They immediately see the **maxMsgs** latest posts
+   * They immediately see the latest posts (up to **maxMsgs**)
    * They can:
      * Login
      * Register
@@ -35,4 +35,4 @@ You can modify the following entries in *config.yml*:
    * Delete one of their posts
    * Delete their account, which takes them back to #1
    * Logout, which takes them back to #1
-3. If they register successfully, they are automatically logged in (they got to #2)
+3. If they register successfully, they are automatically logged in (they go to #2)
