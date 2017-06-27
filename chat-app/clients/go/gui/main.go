@@ -35,7 +35,7 @@ package main
      b. Logout with Submit button.
         Button takes them to / with status !loggedin.
 
-  Note that every page displays a message at the top of the page as:
+  Note that every page displays a message at the top of the page as.
 
  */
 
@@ -49,7 +49,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-    "reflect"
 	"strconv"
 	"strings"
     "text/template"
@@ -147,9 +146,9 @@ func usage() {
     fmt.Println("")
 
     // Re-enable once the functionality is added
-    //fmt.Println("go run PostApp.go [-t TIMEZONE] [-r REGION] [-f REFRESH] [-d] [-h]")
+    //fmt.Println("go run PostApp.go [-r REGION] [-t TIMEZONE] [-n MAX_MESSAGES] [-f REFRESH] [-d] [-h]")
 
-    fmt.Println("go run PostApp.go [-r REGION] [-d] [-h]")
+    fmt.Println("go run PostApp.go [-r REGION] [-n MAX_MESSAGES] [-d] [-h]")
     fmt.Println("")
 
     // Re-enable once the functionality is added
@@ -157,6 +156,7 @@ func usage() {
     // fmt.Println("If REFRESH is omitted, defaults to 30 (seconds)")
 
     fmt.Println("If REGION is omitted, defaults to us-west-2")
+    fmt.Println("If MAX_MESSAGES is omitted, defaults to 20")
 
     fmt.Println("Use -d (debug) to display additional information")
     fmt.Println("Use -h (help) to display this message and quit")
@@ -233,7 +233,9 @@ type PostEntry struct {
     Timestamp string
 }
 
-func GetConfiguration() Configuration {
+func GetConfiguration() error {
+    var myError error
+
     if configuration == (Configuration{}) {
         // Get configuration values
         file, _ := os.Open("conf.json")
@@ -242,11 +244,12 @@ func GetConfiguration() Configuration {
         err := decoder.Decode(&configuration)
 
         if err != nil {
-            log.Fatal("Error parsing config file: " + err.Error())
+            myError = errors.New("Error parsing config file: " + err.Error())
+            return myError
         }
     }
 
-    return configuration
+    return myError
 }
 
 var client *lambda.Lambda
@@ -595,13 +598,17 @@ type userResponse struct {
     Body       userResponseBody    `json:"body"`
 }
 
-func logInUser(userName string, password string) string {
+func logInUser(userName string, password string) (string, error) {
+    var newToken = ""
+    var myError error
+
     user := user{userName, password}
 
     payload, err := json.Marshal(user)
 
     if err != nil {
-        log.Fatal("Error marshalling SignInCognitoUser request: " + err.Error())
+        myError = errors.New("Error marshalling SignInCognitoUser request: " + err.Error())
+        return newToken, myError
     }
 
     svc := getLambdaClient()
@@ -609,14 +616,16 @@ func logInUser(userName string, password string) string {
     result, err := svc.Invoke(&lambda.InvokeInput{FunctionName: aws.String("SignInCognitoUser"), Payload: payload})
 
     if err != nil {
-        log.Fatal("Error calling SignInCognitoUser: " + err.Error())
+        myError = errors.New("Error calling SignInCognitoUser: " + err.Error())
+        return newToken, myError
     }
 
     var resp userResponse
     err = json.Unmarshal(result.Payload, &resp)
 
     if err != nil {
-        log.Fatal("Error unmarshalling SignInCognitoUser response: " + err.Error())
+        myError = errors.New("Error unmarshalling SignInCognitoUser response: " + err.Error())
+        return newToken,myError
     }
 
     // Did we not get a 200?
@@ -627,15 +636,18 @@ func logInUser(userName string, password string) string {
 
         Debug.Println("Got a status code of: " + strconv.Itoa(respFailure.StatusCode))
         Debug.Println("and a message of:      " + respFailure.Body.Error.Message)
-        return ""
+
+        myError = errors.New(respFailure.Body.Error.Message)
+        return newToken, myError
     }
 
     if resp.Body.Result != "success" {
         Debug.Println("Got a result of: " + resp.Body.Result)
-        return ""
+        myError = errors.New("Got a result of: " + resp.Body.Result)
+        return newToken, myError
     }
 
-    return resp.Body.Data.AuthenticationResult.AccessToken
+    return resp.Body.Data.AuthenticationResult.AccessToken, myError
 }
 
 func LoginServer(w http.ResponseWriter, req *http.Request) {
@@ -660,14 +672,15 @@ func LoginServer(w http.ResponseWriter, req *http.Request) {
 
         Debug.Println("Calling logInUser with user name: " + username + " and password: " + password)
 
-        token = logInUser(username, password)
+        newToken, err := logInUser(username, password)
 
-        if token == "" {
+        if err != nil {
             fmt.Println("Login failed")
             // Login failed, so send them back to start
             status = LOGIN_FAILED
             StartServer(w, req)
         } else {
+            token = newToken
             fmt.Println("User is now logged in")
             status = LOGGED_IN
             Debug.Println("Calling HomeServer from LoginServer")
@@ -736,43 +749,43 @@ type registerUserResponseFailure struct {
     Body       registerUserResponseFailureBody `json:"body"`
 }
 
-func startRegisterUser(name string, password string, email string) bool {
+func startRegisterUser(name string, password string, email string) error {
+    var myError error
+
     request := startRegisterUserRequest{name, password, email}
 
     payload, err := json.Marshal(request)
 
     if err != nil {
-        log.Fatal("Error marshalling StartAddingPendingCognitoUser request: " + err.Error())
+        myError = errors.New("Error marshalling StartAddingPendingCognitoUser request: " + err.Error())
+        return myError
     }
 
-    sess := session.Must(session.NewSessionWithOptions(session.Options{
-        SharedConfigState: session.SharedConfigEnable,
-    }))
-
-    svc := lambda.New(sess, &aws.Config{Region: aws.String(configuration.Region)})
-    //    svc := getLambdaClient()
+    svc := getLambdaClient()
 
     result, err := svc.Invoke(&lambda.InvokeInput{FunctionName: aws.String("StartAddingPendingCognitoUser"), Payload: payload})
 
     if err != nil {
-        log.Fatal("Error calling StartAddingPendingCognitoUser: " + err.Error())
+        myError = errors.New("Error calling StartAddingPendingCognitoUser: " + err.Error())
+        return myError
     }
 
     var resp registerUserResponse
     err = json.Unmarshal(result.Payload, &resp)
 
     if err != nil {
-        log.Fatal("Error unmarshalling StartAddingPendingCognitoUser response: " + err.Error())
+        myError = errors.New("Error unmarshalling StartAddingPendingCognitoUser response: " + err.Error())
+        return myError
     }
 
     if resp.StatusCode == 200 {
         // Got a valid response, was it success?
         if resp.Body.Result == "success" {
-            return true
+            return myError
         }
     }
 
-    return false
+    return myError
 }
 
 type finishRegisterRequest struct {
@@ -790,46 +803,50 @@ type finishRegisterResponse struct {
     Body       finishRegisterResponseBody `json:"body"`
 }
 
-func finishRegisterUser(name string, code string, password string) string {
-    token := ""
+func finishRegisterUser(name string, code string, password string) (string, error) {
+    newToken := ""
+    var myError error
 
     request := finishRegisterRequest{name, code}
 
     payload, err := json.Marshal(request)
 
     if err != nil {
-        log.Fatal("Error marshalling request for FinishAddingPendingCognitoUser: " + err.Error())
+        myError = errors.New("Error marshalling request for FinishAddingPendingCognitoUser: " + err.Error())
+        return newToken, myError
     }
 
-    sess := session.Must(session.NewSessionWithOptions(session.Options{
-        SharedConfigState: session.SharedConfigEnable,
-    }))
-
-    svc := lambda.New(sess, &aws.Config{Region: aws.String(configuration.Region)})
-    //    svc := getLambdaClient()
+    svc := getLambdaClient()
 
     result, err := svc.Invoke(&lambda.InvokeInput{FunctionName: aws.String("FinishAddingPendingCognitoUser"), Payload: payload})
 
     if err != nil {
-        log.Fatal("Error calling FinishAddingPendingCognitoUser: " + err.Error())
+        myError = errors.New("Error calling FinishAddingPendingCognitoUser: " + err.Error())
+        return newToken, myError
     }
 
     var resp finishRegisterResponse
     err = json.Unmarshal(result.Payload, &resp)
 
     if err != nil {
-        log.Fatal("Error unmarshalling FinishAddingPendingCognitoUser response: " + err.Error())
+        myError = errors.New("Error unmarshalling FinishAddingPendingCognitoUser response: " + err.Error())
+        return newToken, myError
     }
 
     if resp.StatusCode == 200 {
         // Got a valid response, was it success?
         if resp.Body.Result == "success" {
             // Log them in and get token
-            token = logInUser(name, password)
+            newToken, err = logInUser(name, password)
+
+            if err != nil {
+                myError = errors.New("Error logging user in: " + err.Error())
+                return "", myError
+            }
         }
     }
 
-    return token
+    return newToken, myError
 }
 
 func RegisterServer(w http.ResponseWriter, req *http.Request) {
@@ -855,9 +872,9 @@ func RegisterServer(w http.ResponseWriter, req *http.Request) {
         Debug.Println("   Password: " + password)
         Debug.Println("   Email     " + email)
 
-        isRegStarted := startRegisterUser(username, password, email)
+        err := startRegisterUser(username, password, email)
 
-        if isRegStarted {
+        if err == nil {
             status = REGISTERING
             StartServer(w, req)
         } else {
@@ -873,9 +890,9 @@ func RegisterServer(w http.ResponseWriter, req *http.Request) {
 
         code := req.Form.Get("code")
 
-        newToken := finishRegisterUser(username, code, password)
+        newToken, err := finishRegisterUser(username, code, password)
 
-        if newToken == "" {
+        if err != nil {
             status = REGISTRATION_FAILED
             StartServer(w, req)
         } else {
@@ -915,14 +932,17 @@ type resetPasswordResponse struct {
     Body       resetPasswordResponseBody `json:"body"`
 }
 
-func startResetPassword(userName string) bool {
+func startResetPassword(userName string) error {
+    var myError error
+
      // Create request
     request := resetPasswordRequest{userName}
 
     payload, err := json.Marshal(request)
 
     if err != nil {
-        log.Fatal("Error marshalling StartChangingForgottenCognitoUserPassword request: " + err.Error())
+        myError = errors.New("Error marshalling StartChangingForgottenCognitoUserPassword request: " + err.Error())
+        return myError
     }
 
     svc := getLambdaClient()
@@ -930,23 +950,25 @@ func startResetPassword(userName string) bool {
     result, err := svc.Invoke(&lambda.InvokeInput{FunctionName: aws.String("StartChangingForgottenCognitoUserPassword"), Payload: payload})
 
     if err != nil {
-        log.Fatal("Error calling StartChangingForgottenCognitoUserPassword: " + err.Error())
+        myError = errors.New("Error calling StartChangingForgottenCognitoUserPassword: " + err.Error())
+        return myError
     }
 
     var resp resetPasswordResponse
     err = json.Unmarshal(result.Payload, &resp)
 
     if err != nil {
-        log.Fatal("Error unmarshalling StartChangingForgottenCognitoUserPassword response: " + err.Error())
+        myError = errors.New("Error unmarshalling StartChangingForgottenCognitoUserPassword response: " + err.Error())
+        return myError
     }
 
     if resp.StatusCode == 200 {
         if resp.Body.Result == "success" {
-            return true
+            return myError
         }
     }
 
-    return false
+    return myError
 }
 
 type finishResetRequest struct {
@@ -988,14 +1010,20 @@ func finishResetPassword(userName string, cc string, pw string) (string, error) 
 
     if resp.StatusCode == 200 {
         if resp.Body.Result == "success" {
-            theToken = logInUser(username, pw)
+            theToken, err := logInUser(username, pw)
+
+            if err != nil {
+                myError = errors.New("Error loggging in user in ??: " + err.Error())
+                return theToken, myError
+            }
         }
     } else {
         var failResp registerUserResponseFailure
         err = json.Unmarshal(result.Payload, &failResp)
 
         if err == nil {
-            Debug.Println("Got error message finishing password reset: " + failResp.Body.Error.Message)
+            myError = errors.New("Got error message finishing password reset: " + failResp.Body.Error.Message)
+            return theToken, myError
         }
     }
 
@@ -1021,17 +1049,17 @@ func ResetServer(w http.ResponseWriter, req *http.Request) {
         Debug.Println("Calling startResetPassword with:")
         Debug.Println("   Username: " + username)
 
-        isResetStarted := startResetPassword(username)
+        err := startResetPassword(username)
 
-        if isResetStarted {
+        if err != nil {
+            // Start resetting failed, so shoot them back to start
+            status = RESET_FAILED
+            StartServer(w, req)
+        } else {
             status = RESETTING
             // StartServer sees
             // status == RESETTING
             // and creates a new form with reset.tmpl as 3rd item.
-            StartServer(w, req)
-        } else {
-            // Start resetting failed, so shoot them back to start
-            status = RESET_FAILED
             StartServer(w, req)
         }
     case RESETTING:
@@ -1133,13 +1161,16 @@ type finishSigninResponse struct {
     Body       postResponseBody    `json:"body"`
 }
 
-func postFromSignedInUser(accessToken string, message string) bool {
+func postFromSignedInUser(accessToken string, message string) error {
+    var myError error
+
     request := postRequest{accessToken, message}
 
     payload, err := json.Marshal(request)
 
     if err != nil {
-        log.Fatal("Error marshalling request for AddPost: " + err.Error())
+        myError = errors.New("Error marshalling request for AddPost: " + err.Error())
+        return myError
     }
 
     svc := getLambdaClient()
@@ -1147,7 +1178,8 @@ func postFromSignedInUser(accessToken string, message string) bool {
     result, err := svc.Invoke(&lambda.InvokeInput{FunctionName: aws.String("AddPost"), Payload: payload})
 
     if err != nil {
-        return false
+        myError = errors.New("Error calling AddPost: " + err.Error())
+        return myError
     }
 
     var resp finishSigninResponse
@@ -1155,19 +1187,22 @@ func postFromSignedInUser(accessToken string, message string) bool {
     err = json.Unmarshal(result.Payload, &resp)
 
     if err != nil {
-        log.Fatal("Error unmarshalling AddPost response: " + err.Error())
+        myError = errors.New("Error unmarshalling AddPost response: " + err.Error())
+        return myError
     }
 
     // Make sure we got a 200 and success
     if resp.StatusCode != 200 {
-        return false
+        myError = errors.New("Got status code: " + strconv.Itoa(resp.StatusCode))
+        return myError
     }
 
     if resp.Body.Result != "success" {
-        return false
+        myError = errors.New("Bad result: " + resp.Body.Result)
+        return myError
     }
 
-    return true
+    return myError
 }
 
 func PostServer(w http.ResponseWriter, req *http.Request) {
@@ -1178,12 +1213,12 @@ func PostServer(w http.ResponseWriter, req *http.Request) {
 
     message := req.Form.Get("message")
 
-    success := postFromSignedInUser(token, message)
+    err := postFromSignedInUser(token, message)
 
-    if success {
-        status = MESSAGE_POSTED
-    } else {
+    if err != nil {
         status = MESSAGE_FAILED
+    } else {
+        status = MESSAGE_POSTED
     }
 
     HomeServer(w, req)
@@ -1251,29 +1286,32 @@ func DeleteServer(w http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
-    GetConfiguration()
-    // Flags and their default values:
-    // Timezone
-    timezonePtr := flag.String("t", configuration.Timezone, "Timezone for displayed date and time")
-    // Region
-    regionPtr := flag.String("r", configuration.Region, "Region to look for services")
-    // Max # messages
-    maxMsgsPtr := flag.Int("n", configuration.MaxMessages, "Maximum number of messages to download")
-    // Refresh duration (seconds)
-    refreshPtr := flag.Int("f", configuration.RefreshSeconds, "Duration, in seconds, between refreshing post list")
-    // Print extra info
+    regionPtr := flag.String("r", "us-west-2", "Region to look for services")
+    timezonePtr := flag.String("t", "UTC", "Timezone for displayed date and time")
+    maxMsgsPtr := flag.Int("n", 20, "Maximum number of messages to download")
+    refreshPtr := flag.Int("f", 30, "Duration, in seconds, between refreshing post list")
     debugPtr := flag.Bool("d", false, "Whether to show debug output")
-    // Show help message and quit
     helpPtr := flag.Bool("h", false, "Show usage")
+
+    // Override default value if configuration is parsed correctly
+    err := GetConfiguration()
+
+    if err == nil {
+        regionPtr = flag.String("r", configuration.Region, "Region to look for services")
+        timezonePtr = flag.String("t", configuration.Timezone, "Timezone for displayed date and time")
+        maxMsgsPtr = flag.Int("n", configuration.MaxMessages, "Maximum number of messages to download")
+        refreshPtr = flag.Int("f", configuration.RefreshSeconds, "Duration, in seconds, between refreshing post list")
+        debugPtr = flag.Bool("d", configuration.Debug, "Whether to show debug output")
+    }
 
     flag.Parse()
 
-    // Validate args
+    // Save configuration
     configuration.Region = *regionPtr
+    configuration.Timezone = *timezonePtr
     configuration.MaxMessages = *maxMsgsPtr
     configuration.RefreshSeconds = *refreshPtr
     configuration.Debug = *debugPtr
-    configuration.Timezone = *timezonePtr
 
     help := *helpPtr
 
@@ -1292,13 +1330,6 @@ func main() {
     Debug.Println("Timezone:   " + configuration.Timezone)
     Debug.Println("Max # msgs: " + strconv.Itoa(configuration.MaxMessages))
     Debug.Println("Refresh:    " + strconv.Itoa(configuration.RefreshSeconds))
-
-    // Print out lambda client type
-    sess := session.Must(session.NewSessionWithOptions(session.Options{
-        SharedConfigState: session.SharedConfigEnable,
-    }))
-
-    svc := lambda.New(sess, &aws.Config{Region: aws.String(configuration.Region)})
 
     ParseTemplates()
 
@@ -1321,7 +1352,7 @@ func main() {
     http.HandleFunc("/unregister", UnregisterServer)
     // Otherwise?
 
-    err := http.ListenAndServe(":12345", nil)
+    err = http.ListenAndServe(":12345", nil)
 
     if err != nil {
         log.Fatal("ListenAndServe returned error: ", err)
