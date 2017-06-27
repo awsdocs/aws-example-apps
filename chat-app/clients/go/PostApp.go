@@ -30,6 +30,19 @@ import (
 	"github.com/aws/aws-sdk-go/service/lambda"
 )
 
+// Used for status
+const (
+    NOT_LOGGED_IN = iota
+    LOGGED_IN
+    LOGGING_IN
+    LOGIN_FAILED
+    REGISTERING
+    REGISTRATION_FAILED
+    RESETTING
+    RESET_FAILED
+)
+
+
 func clearScreen() {
 	switch runtime.GOOS {
 	case "linux":

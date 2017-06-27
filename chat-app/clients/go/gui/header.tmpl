@@ -1,0 +1,65 @@
+<!-- Copyright 2017 Amazon.com, Inc. or its affiliates. All Rights
+Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License").  You may
+not use this file except in compliance with the License.  A copy of the
+License is located at
+
+http://aws.amazon.com/apache2.0/ -->
+
+<!DOCTYPE html>
+
+<html>
+
+  <head>
+
+    <title>{{ .Title }}</title>
+
+    <meta charset="utf-8">
+
+    <style type="text/css">
+      h1 {
+      color:blue;
+	  font: 32px Helvetica, Arial, sans-serif;
+	  line-height: 80px;
+	  padding-left: 84px;
+	  }
+
+	  p {
+      font: 13px Helvetica, Arial, sans-serif;
+      }
+
+      td {
+	  vertical-align:top;
+      }
+
+      div.login {
+      width: 90%;
+      }
+
+      table.posts {
+      width: 50%;
+      }
+
+      select {
+      width: 50%;
+      }
+
+      p.msg {
+      color: red;
+      }
+    </style>
+
+    <script type="text/javascript"> function SelectItem(i) {
+      document.getElementById("message_id").value = i; } 
+    </script>
+
+  </head>
+
+  <body>
+
+    <h1>{{ .Title }}</h1>
+
+    {{ if ne .Message "" }}
+    <p class="msg">{{ .Message }}</p>
+    {{ end }}

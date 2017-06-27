@@ -1,0 +1,31 @@
+  <div id="posts" width="90%">
+
+    {{ if .Posts }}
+      <select onchange="SelectItem(this.value);" name="ThePosts" size="10" >
+        {{range .Posts}}
+          <br>
+          <option value= {{.Timestamp}} >
+            {{.Date}}
+          </option>
+        {{ if ne .Message "" }}
+          <option disabled>
+            {{.Message}}
+        {{ end }}
+          </option>
+          <option disabled>
+            &nbsp;
+          </option>
+          <br>
+
+        {{ end }}
+
+        <!-- Dummy option so the last item is displayed -->
+        <option selected disabled>
+          &nbsp;
+        </option>
+      </select>
+    {{ else }}
+      <p>Did not get any posts in the template.</p>
+    {{ end }}
+
+  </div>
