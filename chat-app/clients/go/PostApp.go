@@ -30,18 +30,50 @@ import (
 	"github.com/aws/aws-sdk-go/service/lambda"
 )
 
-// Used for status
-const (
-    NOT_LOGGED_IN = iota
-    LOGGED_IN
-    LOGGING_IN
-    LOGIN_FAILED
-    REGISTERING
-    REGISTRATION_FAILED
-    RESETTING
-    RESET_FAILED
-)
+type Configuration struct {
+    Region      string
+    Timezone    string
+    MaxMessages int
+    RefreshSeconds int
+    Debug bool
+}
 
+// Configuration
+var configuration Configuration
+
+func GetConfiguration() error {
+    var myError error
+
+    if configuration == (Configuration{}) {
+        // Get configuration values
+        file, _ := os.Open("conf.json")
+        decoder := json.NewDecoder(file)
+
+        err := decoder.Decode(&configuration)
+
+        if err != nil {
+            myError = errors.New("Error parsing config file: " + err.Error())
+            return myError
+        }
+    }
+
+    return myError
+}
+
+var client *lambda.Lambda
+
+func getLambdaClient() (*lambda.Lambda)  {
+	if client == nil { // *(lambda.Lambda{}) {
+		// Create Lambda service client
+		sess := session.Must(session.NewSessionWithOptions(session.Options{
+			SharedConfigState: session.SharedConfigEnable,
+		}))
+
+		client = lambda.New(sess, &aws.Config{Region: aws.String(configuration.Region)})
+	}
+
+	return client
+}
 
 func clearScreen() {
 	switch runtime.GOOS {
@@ -123,7 +155,9 @@ type getPostsResponse struct {
 	Body       getPostsResponseBody    `json:"body"`
 }
 
-func getAllPosts(debug bool, svc *lambda.Lambda, maxMessages int) (getPostsResponse, error) {
+func getAllPosts(maxMessages int) (getPostsResponse, error) {
+	svc := getLambdaClient()
+
 	var myError error
 	var resp getPostsResponse
 
@@ -144,12 +178,10 @@ func getAllPosts(debug bool, svc *lambda.Lambda, maxMessages int) (getPostsRespo
 		return resp, myError
 	}
 
-	if debug {
-		fmt.Println("")
-		fmt.Println("Raw response:")
-		fmt.Println(string(result.Payload))
-		fmt.Println("")
-	}
+	Debug.Println("")
+	Debug.Println("Raw response:")
+	Debug.Println(string(result.Payload))
+	Debug.Println("")
 
 	err = json.Unmarshal(result.Payload, &resp)
 
@@ -161,7 +193,7 @@ func getAllPosts(debug bool, svc *lambda.Lambda, maxMessages int) (getPostsRespo
 	return resp, myError
 }
 
-func listAllPosts(debug bool, timezone string, resp getPostsResponse) error {
+func listAllPosts(resp getPostsResponse) error {
 	var myError error
 
 	// Check the status code
@@ -259,7 +291,9 @@ type userResponseFailure struct {
 	Body       userResponseBodyFailure `json:"body"`
 }
 
-func signInUser(debug bool, svc *lambda.Lambda, userName string, password string) (string, error) {
+func signInUser(userName string, password string) (string, error) {
+	svc := getLambdaClient()
+
 	var myError error
 
 	Debug.Println("Creating payload for user " + userName)
@@ -327,7 +361,9 @@ type deleteAccountRequest struct {
 	AccessToken string
 }
 
-func deleteUserAccount(debug bool, svc *lambda.Lambda, accessToken string) error {
+func deleteUserAccount(accessToken string) error {
+	svc := getLambdaClient()
+
 	var myError error
 
 	token := deleteAccountRequest{accessToken}
@@ -376,7 +412,9 @@ type deletePostRequest struct {
 	TimestampOfPost string
 }
 
-func deletePost(debug bool, svc *lambda.Lambda, accessToken string, timestamp string) error {
+func deletePost(accessToken string, timestamp string) error {
+	svc := getLambdaClient()
+
 	var myError error
 
 	req := deletePostRequest{accessToken, timestamp}
@@ -446,7 +484,9 @@ type finishSigninResponse struct {
 	Body       postResponseBody    `json:"body"`
 }
 
-func postFromSignedInUser(debug bool, svc *lambda.Lambda, accessToken string, message string) error {
+func postFromSignedInUser(accessToken string, message string) error {
+	svc := getLambdaClient()
+
 	var myError error
 
 	request := postRequest{accessToken, message}
@@ -538,7 +578,9 @@ type registerUserResponseFailure struct {
 	Body       registerUserResponseFailureBody `json:"body"`
 }
 
-func startRegisterUser(debug bool, svc *lambda.Lambda, name string, password string, email string) error {
+func startRegisterUser(name string, password string, email string) error {
+	svc := getLambdaClient()
+
 	var myError error
 
 	request := startRegisterUserRequest{name, password, email}
@@ -615,7 +657,9 @@ type finishRegisterResponse struct {
 	Body       finishRegisterResponseBody `json:"body"`
 }
 
-func finishRegisterUser(debug bool, svc *lambda.Lambda, name string, code string) error {
+func finishRegisterUser(name string, code string) error {
+	svc := getLambdaClient()
+
 	var myError error
 
 	request := finishRegisterRequest{name, code}
@@ -698,7 +742,9 @@ type resetPasswordResponse struct {
 	Body       resetPasswordResponseBody `json:"body"`
 }
 
-func startResetPassword(debug bool, svc *lambda.Lambda, userName string) error {
+func startResetPassword(userName string) error {
+	svc := getLambdaClient()
+
 	var myError error
 
 	// Create request
@@ -767,7 +813,9 @@ type finishResetRequest struct {
 	NewPassword      string
 }
 
-func finishResetPassword(debug bool, svc *lambda.Lambda, userName string, cc string, pw string) error {
+func finishResetPassword(userName string, cc string, pw string) error {
+	svc := getLambdaClient()
+
 	var myError error
 
 	// Create request
@@ -873,12 +921,12 @@ func notifySignedIn(registered bool) {
 	}
 }
 
-func getAndListAllPosts(debug bool, svc *lambda.Lambda, timezone string, maxMessages int) {
+func getAndListAllPosts(maxMessages int) {
 	Debug.Println("Calling getAllPosts")
-	posts, err := getAllPosts(debug, svc, maxMessages)
+	posts, err := getAllPosts(maxMessages)
 
 	if err == nil {
-		listAllPosts(debug, timezone, posts)
+		listAllPosts(posts)
 	} else {
 		fmt.Println("Could not get posts: " + err.Error())
 	}
@@ -889,7 +937,7 @@ type logInUserResult struct {
 	accessToken string
 }
 
-func logInUser(debug bool, svc *lambda.Lambda, scanner *bufio.Scanner) (logInUserResult, error) {
+func logInUser(scanner *bufio.Scanner) (logInUserResult, error) {
 	var myError error
 	var result logInUserResult
 
@@ -900,7 +948,7 @@ func logInUser(debug bool, svc *lambda.Lambda, scanner *bufio.Scanner) (logInUse
 	fmt.Println("")
 
 	Debug.Println("Calling signInUser")
-	token, err := signInUser(debug, svc, name, password)
+	token, err := signInUser(name, password)
 
 	// err means something went wrong;
 	// err.Error() has details
@@ -924,7 +972,7 @@ type registerUserResult struct {
 	registerPrompt string
 }
 
-func registerUser(debug bool, svc *lambda.Lambda, scanner *bufio.Scanner, pastStep1 bool, name string, password string) (registerUserResult, error) {
+func registerUser(scanner *bufio.Scanner, pastStep1 bool, name string, password string) (registerUserResult, error) {
 	var result registerUserResult
 	var myError error
 
@@ -935,7 +983,7 @@ func registerUser(debug bool, svc *lambda.Lambda, scanner *bufio.Scanner, pastSt
 
 		Debug.Println("Calling finishRegisterUser")
 
-		err := finishRegisterUser(debug, svc, name, code)
+		err := finishRegisterUser(name, code)
 
 		if err != nil {
 			myError = errors.New("Could not finish registering user: " + err.Error())
@@ -943,7 +991,7 @@ func registerUser(debug bool, svc *lambda.Lambda, scanner *bufio.Scanner, pastSt
 		}
 
 		// Sign them in
-		token, err := signInUser(debug, svc, name, password)
+		token, err := signInUser(name, password)
 
 		if err == nil {
 			result.userName = name
@@ -974,7 +1022,7 @@ func registerUser(debug bool, svc *lambda.Lambda, scanner *bufio.Scanner, pastSt
 		email := getStringValue(scanner, "Enter your email address")
 		fmt.Println("")
 
-		err := startRegisterUser(debug, svc, name, password, email)
+		err := startRegisterUser(name, password, email)
 
 		if err == nil {
 			result.userName = name
@@ -996,7 +1044,7 @@ type resetPasswordResult struct {
 	resetPasswordPrompt string
 }
 
-func resetPassword(debug bool, svc *lambda.Lambda, scanner *bufio.Scanner, pastStep1 bool, name string) (resetPasswordResult, error) {
+func resetPassword(scanner *bufio.Scanner, pastStep1 bool, name string) (resetPasswordResult, error) {
 	var result resetPasswordResult
 	var myError error
 
@@ -1010,7 +1058,7 @@ func resetPassword(debug bool, svc *lambda.Lambda, scanner *bufio.Scanner, pastS
 		pw := getStringValue(scanner, "Enter your new password")
 		fmt.Println("")
 
-		err := finishResetPassword(debug, svc, name, cc, pw)
+		err := finishResetPassword(name, cc, pw)
 
 		if err == nil {
 			Debug.Println("Successfully reset password")
@@ -1028,7 +1076,7 @@ func resetPassword(debug bool, svc *lambda.Lambda, scanner *bufio.Scanner, pastS
 		Debug.Println("Calling resetPassword")
 		Debug.Println("For user " + name)
 
-		err := startResetPassword(debug, svc, name)
+		err := startResetPassword(name)
 
 		if err == nil {
 			result.pastStep1 = true
@@ -1041,7 +1089,7 @@ func resetPassword(debug bool, svc *lambda.Lambda, scanner *bufio.Scanner, pastS
 	}
 }
 
-func postMessage(debug bool, svc *lambda.Lambda, scanner *bufio.Scanner, accessToken string) error {
+func postMessage(scanner *bufio.Scanner, accessToken string) error {
 	var myError error
 
 	// Query for message to post
@@ -1049,7 +1097,7 @@ func postMessage(debug bool, svc *lambda.Lambda, scanner *bufio.Scanner, accessT
 
 	Debug.Println("Calling postMessage")
 
-	err := postFromSignedInUser(debug, svc, accessToken, message)
+	err := postFromSignedInUser(accessToken, message)
 
 	if err == nil {
 		fmt.Println("Message posted")
@@ -1060,10 +1108,10 @@ func postMessage(debug bool, svc *lambda.Lambda, scanner *bufio.Scanner, accessT
 	}
 }
 
-func deleteAccount(debug bool, svc *lambda.Lambda, accessToken string) error {
+func deleteAccount(accessToken string) error {
 	var myError error
 
-	err := deleteUserAccount(debug, svc, accessToken)
+	err := deleteUserAccount(accessToken)
 
 	if err == nil {
 		fmt.Println("Your account has been deleted")
@@ -1074,26 +1122,20 @@ func deleteAccount(debug bool, svc *lambda.Lambda, accessToken string) error {
 	return myError
 }
 
-func deleteMyPost(debug bool, svc *lambda.Lambda, scanner *bufio.Scanner, accessToken string) error {
+func deleteMyPost(scanner *bufio.Scanner, accessToken string) error {
 	var myError error
 
 	// Get the ID of the post
 	timestamp := getStringValue(scanner, "Enter the ID of the post to delete (the ID is the long number at the end of the first line):")
 	fmt.Println("")
 
-	err := deletePost(debug, svc, accessToken, timestamp)
+	err := deletePost(accessToken, timestamp)
 
 	if err != nil {
 		myError = errors.New("Could not delete post: " + err.Error())
 	}
 
 	return myError
-}
-
-type Configuration struct {
-	Region      string
-	Timezone    string
-	MaxMessages int
 }
 
 func main() {
@@ -1110,52 +1152,50 @@ func main() {
 
 	*/
 
-	// Read config options
-	file, _ := os.Open("conf.json")
-	decoder := json.NewDecoder(file)
-	configuration := Configuration{}
+    regionPtr := flag.String("r", "us-west-2", "Region to look for services")
+    timezonePtr := flag.String("t", "UTC", "Timezone for displayed date and time")
+    maxMsgsPtr := flag.Int("n", 20, "Maximum number of messages to download")
+    refreshPtr := flag.Int("f", 30, "Duration, in seconds, between refreshing post list")
+    debugPtr := flag.Bool("d", false, "Whether to show debug output")
+    helpPtr := flag.Bool("h", false, "Show usage")
 
-	err := decoder.Decode(&configuration)
+    // Override default value if configuration is parsed correctly
+    err := GetConfiguration()
 
-	if err != nil {
-		fmt.Println("error:", err)
-	}
+    if err == nil {
+        regionPtr = flag.String("r", configuration.Region, "Region to look for services")
+        timezonePtr = flag.String("t", configuration.Timezone, "Timezone for displayed date and time")
+        maxMsgsPtr = flag.Int("n", configuration.MaxMessages, "Maximum number of messages to download")
+        refreshPtr = flag.Int("f", configuration.RefreshSeconds, "Duration, in seconds, between refreshing post list")
+        debugPtr = flag.Bool("d", configuration.Debug, "Whether to show debug output")
+    }
 
-	// Flags and their default values:
-	// Timezone
-	timezonePtr := flag.String("t", configuration.Timezone, "Timezone for displayed date and time")
-	// Region
-	regionPtr := flag.String("r", configuration.Region, "Region to look for services")
-	// Max # messages
-	maxMsgsPtr := flag.Int("n", configuration.MaxMessages, "Maximum number of messages to download")
-	// Print extra info
-	debugPtr := flag.Bool("d", false, "Whether to show debug output")
-	// Show help message and quit
-	helpPtr := flag.Bool("h", false, "Show usage")
+    flag.Parse()
 
-	flag.Parse()
+    // Save configuration
+    configuration.Region = *regionPtr
+    configuration.Timezone = *timezonePtr
+    configuration.MaxMessages = *maxMsgsPtr
+    configuration.RefreshSeconds = *refreshPtr
+    configuration.Debug = *debugPtr
 
-	// Validate args
-	region := *regionPtr
-	debug := *debugPtr
-	timezone := *timezonePtr
-	maxMsgs := *maxMsgsPtr
-	help := *helpPtr
+    help := *helpPtr
 
-	if help {
-		usage()
-		os.Exit(0)
-	}
+    if help {
+        usage()
+        os.Exit(0)
+    }
 
-	if debug {
-		initLog(os.Stderr)
-	} else {
-		initLog(ioutil.Discard)
-	}
+    if configuration.Debug {
+        initLog(os.Stderr)
+    } else {
+        initLog(ioutil.Discard)
+    }
 
-	Debug.Println("Region: " + region)
-	Debug.Println("Timezone: " + timezone)
-	Debug.Println("Max # msgs: " + strconv.Itoa(maxMsgs))
+    Debug.Println("Region:     " + configuration.Region)
+    Debug.Println("Timezone:   " + configuration.Timezone)
+    Debug.Println("Max # msgs: " + strconv.Itoa(configuration.MaxMessages))
+    Debug.Println("Refresh:    " + strconv.Itoa(configuration.RefreshSeconds))
 
 	cursor := "(anonymous)> "
 
@@ -1170,14 +1210,7 @@ func main() {
 
 	// Initialize a session that the SDK will use to load configuration,
 	// credentials, and region from the shared config file. (~/.aws/config).
-	Debug.Println("Calling Lambda function in: " + region)
-
-	// Create Lambda service client
-	sess := session.Must(session.NewSessionWithOptions(session.Options{
-		SharedConfigState: session.SharedConfigEnable,
-	}))
-
-	svc := lambda.New(sess, &aws.Config{Region: aws.String(region)})
+	Debug.Println("Calling Lambda function in: " + configuration.Region)
 
 	scanner := bufio.NewScanner(os.Stdin)
 	inputValue := ""
@@ -1208,7 +1241,7 @@ func main() {
 
 		inputValue = getStringValue(scanner, cursor)
 
-		if inputValue != "q" && inputValue != "Q" && !debug {
+		if inputValue != "q" && inputValue != "Q" && !configuration.Debug {
 			clearScreen()
 		}
 
@@ -1217,7 +1250,7 @@ func main() {
 		switch inputValue {
 		case "1":
 			// Get and list all posts
-			getAndListAllPosts(debug, svc, timezone, maxMsgs)
+			getAndListAllPosts(configuration.MaxMessages)
 
 		case "2":
 			// sign in user
@@ -1228,7 +1261,7 @@ func main() {
 				continue
 			}
 
-			result, err := logInUser(debug, svc, scanner)
+			result, err := logInUser(scanner)
 
 			if err != nil {
 				fmt.Println(err.Error())
@@ -1250,7 +1283,7 @@ func main() {
 				continue
 			}
 
-			result, err := registerUser(debug, svc, scanner, pastStep1, userName, password)
+			result, err := registerUser(scanner, pastStep1, userName, password)
 
 			if err != nil {
 				fmt.Println(err.Error())
@@ -1271,7 +1304,7 @@ func main() {
 				fmt.Println("")
 			}
 
-			result, err := resetPassword(debug, svc, scanner, pastStep1, userName)
+			result, err := resetPassword(scanner, pastStep1, userName)
 
 			if err == nil {
 				cursor = result.cursor
@@ -1286,7 +1319,7 @@ func main() {
 				continue
 			}
 
-			err := postMessage(debug, svc, scanner, accessToken)
+			err := postMessage(scanner, accessToken)
 
 			if err != nil {
 				fmt.Println(err.Error())
@@ -1311,7 +1344,7 @@ func main() {
 				continue
 			}
 
-			err := deleteAccount(debug, svc, accessToken)
+			err := deleteAccount(accessToken)
 
 			if err == nil {
 				signedIn = false
@@ -1329,7 +1362,7 @@ func main() {
 				continue
 			}
 
-			err := deleteMyPost(debug, svc, scanner, accessToken)
+			err := deleteMyPost(scanner, accessToken)
 
 			if err == nil {
 				fmt.Println("Post deleted")
