@@ -1,0 +1,24 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Creates a 'FinishAddingPendingCognitoUser' function in AWS Lambda."
+Parameters:
+  S3BucketName:
+    Description: "Name of the Amazon S3 bucket that contains the 'FinishAddingPendingCognitoUser.zip' file you must upload for this function."
+    Type: "String"
+  IAMRoleARN:
+    Description: "Amazon Resource Name (ARN) of the 'LambdaChatAppRole' role you create in IAM for this function to use."
+    Type: "String"
+Resources:
+  DeleteCognitoUserFunction:
+    Type: "AWS::Lambda::Function"
+    Properties: 
+      Code: 
+        S3Bucket: 
+          Ref: "S3BucketName"
+        S3Key: "FinishAddingPendingCognitoUser.zip"
+      Description: "Confirms a pending user in the Amazon Cognito user pool 'ChatRoomPool'."
+      FunctionName: "FinishAddingPendingCognitoUser"
+      Handler: "index.handler"
+      Role:
+        Ref: "IAMRoleARN"
+      Runtime: "nodejs6.10"
+      Timeout: "30"
