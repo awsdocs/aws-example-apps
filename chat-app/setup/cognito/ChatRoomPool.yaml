@@ -32,3 +32,12 @@ Outputs:
   UserPoolClientID:
     Description: "The client ID of the user pool that is created."
     Value: !Ref ChatRoomUserPoolClient
+  UserPoolID:
+    Description: "The ID of the user pool that is created."
+    Value: !Ref ChatRoomPoolUserPool
+  UserPoolIDShortURL:
+    Description: "The URL prefix to the JWT Set for the user pool that is created."
+    Value: !Join [ "", [ "https://cognito-idp.", !Ref "AWS::Region", ".amazonaws.com/", !Ref ChatRoomPoolUserPool ] ]
+  UserPoolIDLongURL: 
+    Description: "The URL to the JWT Set for the user pool that is created."
+    Value: !Join [ "", [ "https://cognito-idp.", !Ref "AWS::Region", ".amazonaws.com/", !Ref ChatRoomPoolUserPool, "/.well-known/jwks.json" ] ]

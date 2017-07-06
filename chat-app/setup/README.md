@@ -26,12 +26,17 @@ Follow these steps to run the scripts for the app. See [More info](#more-info) t
 
 1. `dynamodb/PostsTable.yaml`
 2. `cognito/ChatRoomPool.yaml` - When the stack shows **CREATE_COMPLETE**, choose 
-    the box next to the stack. On the **Outputs** tab, note the value for the **Key** named **UserPoolClientID** (for example, `8715f0bte9brn79tj9221j2lEX`). You need this value for later steps.
+    the box next to the stack. On the **Outputs** tab, note the value for the **Keys** named 
+    **UserPoolClientID** (for example, `8715f0bte9brn79tj9221j2lEX`), **UserPoolID** (for example, `us-west-2_oa6IReZEX`), and **UserPoolIDShortURL** 
+    (for example, `https://cognito-idp.us-west-2.amazonaws.com/us-west-2_oa6IReZEX`). You need these values for later steps.
 3. `iam/LambdaChatAppRole.yaml` - On the **Review** page, select **I acknowledge 
    that AWS CloudFormation might create IAM resources with custom names.** When the stack shows **CREATE_COMPLETE**, choose the box next to the stack. On the **Outputs** tab, note the value for the 
    **Key** named **RoleARN** (for example, `arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/LambdaChatAppRole`, where `YOUR_AWS_ACCOUNT_ID` is your 12-digit AWS account ID). You need this value for later steps.
 
-**Step 2.** Upload the following .zip files to a single Amazon S3 bucket. Note the bucket's name. You need this name for later steps. 
+**Step 2.** Unzip the following .zip file: `lambda/VerifyCognitoSignIn.zip`. Change the value of the `iss` variable in the `index.js` file to the **UserPoolIDShortURL** value you noted earlier. Save your changes, and 
+re-ZIP the file. 
+
+**Step 3.** Upload the following .zip files to a single Amazon S3 bucket. Note the bucket's name. You need this name for later steps. 
 
 * `lambda/AddPost.zip`
 * `lambda/DeleteCognitoUser.zip`
@@ -42,9 +47,9 @@ Follow these steps to run the scripts for the app. See [More info](#more-info) t
 * `lambda/SignInCognitoUser.zip`
 * `lambda/StartAddingPendingCognitoUser.zip`
 * `lambda/StartChangingForgottenCognitoUserPassword.zip`
-* `lambda/VerifyCognitoSignIn.zip`
+* The `VerifyCognitoSignIn.zip` file you changed in the previous step
 
-**Step 3.** In the CloudFormation console, run these template files in the following 
+**Step 4.** In the CloudFormation console, run these template files in the following 
 order. You must create a separate stack for each template file. For each stack, choose a meaningful value for **Stack name**. 
 For each stack, for **IAMRoleARN**, type the **RoleARN** value you noted earlier. For **S3BucketName**, type the bucket name you noted earlier. Accept the default settings on the stack's **Options** page.
 
@@ -59,13 +64,16 @@ For each stack, for **IAMRoleARN**, type the **RoleARN** value you noted earlier
 * `lambda/DeletePost.yaml`
 * `lambda/DeleteCognitoUser.yaml`
 
-**Step 4.** In the Lambda console, change the value of `ClientId` in these functions' code to match the **UserPoolClientID** value you noted earlier.
+**Step 5.** In the Lambda console, change the value of `ClientId` in these functions' code to match the **UserPoolClientID** value you noted earlier.
 
 * `StartAddingPendingCognitoUser`
 * `FinishAddingPendingCognitoUser`
 * `SignInCognitoUser`
 * `StartChangingForgottenCognitoUserPassword`
 * `FinishChangingForgottenCognitoUserPassword`
+
+**Step 6.** In the Lambda console, change the value of `UserPoolID` in the `SignInCognitoUser` function's code 
+to match the **UserPoolID** value you noted earlier.
   
 **To edit a function's code** 
 
