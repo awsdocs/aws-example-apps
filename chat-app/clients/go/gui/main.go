@@ -233,9 +233,7 @@ type PostEntry struct {
     Timestamp string
 }
 
-func GetConfiguration() error {
-    var myError error
-
+func SetConfiguration() {
     if configuration == (Configuration{}) {
         // Get configuration values
         file, _ := os.Open("conf.json")
@@ -244,12 +242,14 @@ func GetConfiguration() error {
         err := decoder.Decode(&configuration)
 
         if err != nil {
-            myError = errors.New("Error parsing config file: " + err.Error())
-            return myError
+            // Set configuration to default values
+            configuration.Debug = false
+            configuration.MaxMessages = 20
+            configuration.Region = "us-west-2"
+            configuration.RefreshSeconds = 30
+            configuration.Timezone = "UTC"
         }
     }
-
-    return myError
 }
 
 var client *lambda.Lambda
@@ -1286,27 +1286,19 @@ func DeleteServer(w http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
-    regionPtr := flag.String("r", "us-west-2", "Region to look for services")
-    timezonePtr := flag.String("t", "UTC", "Timezone for displayed date and time")
-    maxMsgsPtr := flag.Int("n", 20, "Maximum number of messages to download")
-    refreshPtr := flag.Int("f", 30, "Duration, in seconds, between refreshing post list")
-    debugPtr := flag.Bool("d", false, "Whether to show debug output")
-    helpPtr := flag.Bool("h", false, "Show usage")
-
     // Override default value if configuration is parsed correctly
-    err := GetConfiguration()
+    SetConfiguration()
 
-    if err == nil {
-        regionPtr = flag.String("r", configuration.Region, "Region to look for services")
-        timezonePtr = flag.String("t", configuration.Timezone, "Timezone for displayed date and time")
-        maxMsgsPtr = flag.Int("n", configuration.MaxMessages, "Maximum number of messages to download")
-        refreshPtr = flag.Int("f", configuration.RefreshSeconds, "Duration, in seconds, between refreshing post list")
-        debugPtr = flag.Bool("d", configuration.Debug, "Whether to show debug output")
-    }
+    regionPtr := flag.String("r", configuration.Region, "Region to look for services")
+    timezonePtr := flag.String("t", configuration.Timezone, "Timezone for displayed date and time")
+    maxMsgsPtr := flag.Int("n", configuration.MaxMessages, "Maximum number of messages to download")
+    refreshPtr := flag.Int("f", configuration.RefreshSeconds, "Duration, in seconds, between refreshing post list")
+    debugPtr := flag.Bool("d", configuration.Debug, "Whether to show debug output")
+    helpPtr := flag.Bool("h", false, "Show usage")
 
     flag.Parse()
 
-    // Save configuration
+    // Save configuration if it's changed
     configuration.Region = *regionPtr
     configuration.Timezone = *timezonePtr
     configuration.MaxMessages = *maxMsgsPtr
@@ -1352,13 +1344,13 @@ func main() {
     http.HandleFunc("/unregister", UnregisterServer)
 
 	// Get port # from environemt or use 12345
-	port = os.Getenv("PORT")
+	port := os.Getenv("PORT")
 
-	if port == nil {
+	if port == "" {
 		port = ":12345"
 	}
 
-    err = http.ListenAndServe(port, nil)
+    err := http.ListenAndServe(port, nil)
 
     if err != nil {
         log.Fatal("ListenAndServe returned error: ", err)
