@@ -8,7 +8,6 @@ A copy of the License is located at
 http://aws.amazon.com/apache2.0/
 =end
 
-
 require 'aws-sdk'
 require 'os'
 require 'json'
@@ -35,6 +34,96 @@ If MAXMSGS is not supplied, defaults to 20
 -h     Shows this message and quits
 
 DOC
+
+# Class to store credential profile information in
+class CredsProfile
+  # A credentials profile can have a name, access key, and secret access key
+  def set_name(name)
+    @name = name
+  end
+
+  def set_access_key(access_key)
+    @access_key = access_key
+  end
+
+  def set_secret_key(secret_key)
+    @secret_key = secret_key
+  end
+
+  def name
+    @name
+  end
+
+  def access_key
+    @access_key
+  end
+
+  def secret_key
+    @secret_key
+  end
+end
+
+def get_creds()
+  begin
+    filename = 'C:\\Users\\dougsch\\.aws\\credentials'
+
+    creds = CredsProfile.new
+
+    i = 1
+
+    File.readlines(filename).each do |line|
+      # Split input line at '='
+      values = line.split("=")
+
+      case values.length
+        when 1
+          k = values[0].strip
+          creds.set_name(k)
+
+        when 2
+          k = values[0].strip
+          v = values[1].strip
+
+          if k == 'aws_access_key_id'
+            creds.set_access_key(v)
+          end
+
+          if k == 'aws_secret_access_key'
+            creds.set_secret_key(v)
+          end
+      end
+
+      i += 1
+    end
+
+    creds
+  end
+rescue ArgumentError
+  # Dir.home raises ArgumentError when ENV['home'] is not set
+  nil
+end
+
+def hide_all_but_chars(str, show_last, c)
+  if (str == nil) || (str == '')
+    return nil
+  end
+
+  # Get length of string
+  len = str.length    # 10
+  min_len = len / 2
+
+  if show_last > min_len   # Since 4 !> 5, showLast == 4
+    show_last = min_len
+  end
+
+  rest_len = len - show_last   # 10 - 4 == 6
+
+  # Last showLast chars of string
+  str_end = str.slice(rest_len, (len - 1))  # "7890"
+
+  # Pad first rest_len chars
+  str_end.rjust(len, c)
+end
 
 class Message
   def initialize(name, time, msg)
@@ -176,9 +265,8 @@ def print_posts(debug, messages, timezone)
 
 end
 
-def get_all_posts(debug, client, timezone)
-  # By default we get the latest 20 posts
-  my_hash = {:SortBy => 'timestamp', :SortOrder => 'descending', :PostsToGet => 20}
+def get_all_posts(debug, client, timezone, maxmsgs)
+  my_hash = {:SortBy => 'timestamp', :SortOrder => 'descending', :PostsToGet => maxmsgs}
   payload = JSON.generate(my_hash)
 
   debug_print(debug, 'JSON request for posts:')
@@ -379,7 +467,7 @@ def finish_register_user(debug, client, name, code)
     result = my_hash["body"]["result"]
 
     if result == "success"
-      debug_print(debug, "Successfully posted message")
+      debug_print(debug, "Successfully registered user")
       return ""
     end
   end
@@ -492,7 +580,16 @@ def delete_post(debug, client, access_token, timestamp)
     end
   end
 
-  return my_hash["body"]["error"]["message"]
+  if my_hash['body'] != nil
+    if my_hash['body']['error'] != nil
+      if my_hash['body']['error']['message'] != nil
+        return my_hash['body']['error']['message']
+      end
+    end
+  end
+
+  return 'Error: ' + resp.payload.string
+
 end
 
 def delete_user_account(debug, client, access_token)
@@ -537,7 +634,7 @@ debug = false
 
 # Get config values from conf.json
 file = File.read 'conf.json'
-data = JSON.parse()
+data = JSON.parse(file)
 
 region = data['Region']
 timezone = data['Timezone']
@@ -586,8 +683,29 @@ user_name = ''
 # True if signed in (required to post)
 signed_in = false
 
+creds = get_creds()
+
+if debug
+# Barf out user info
+  puts('Access key ID: ' + hide_all_but_chars(creds.access_key, 4, '-'))
+  puts('Secret key:    ' + hide_all_but_chars(creds.secret_key, 4, '-'))
+
+  client = Aws::IAM::Client.new(region: region, access_key_id: creds.access_key, secret_access_key: creds.secret_key)
+  iam = Aws::IAM::Resource.new(client: client)
+
+  # Show user info
+  user = iam.current_user
+  name = user.user_name
+  puts "User name:  #{name}"
+  puts "    ARN:          #{user.arn}"
+  arn_parts = user.arn.split(':')
+  puts "    Account ID:   #{arn_parts[4]}"
+  puts "    User ID:      #{user.user_id}"
+  puts "    Sign-in link: https://#{arn_parts[4]}.signin.aws.amazon.com/console"
+end
+
 # Create Lambda service client
-client = Aws::Lambda::Client.new(region: region)
+client = Aws::Lambda::Client.new(region: region, access_key_id: creds.access_key, secret_access_key: creds.secret_key)
 
 # Replace scanner in args with:
 # value = STDIN.gets.chomp
@@ -622,6 +740,7 @@ while keep_going
   puts
 
   input_value = get_string_value(cursor)
+  input_value.strip!
 
   # Don't clear the screen if we are quitting or debugging
   if input_value != 'q' && input_value != 'Q' && ! debug
@@ -632,7 +751,7 @@ while keep_going
     when '1'
       # list all posts
       debug_print(debug, 'Calling get_all_posts')
-      posts = get_all_posts(debug, client, timezone)
+      posts = get_all_posts(debug, client, timezone, max_msgs)
 
       if posts == nil
         puts 'Could not retrieve any posts'
@@ -664,10 +783,9 @@ while keep_going
           puts 'Could not sign in user'
           puts results[1]
         else
-          user_name = name
           access_token = results[0]
           signed_in = true
-          cursor = '(' + user_name + ')> '
+          cursor = '(' + name + ')> '
         end
       end
 
@@ -689,10 +807,9 @@ while keep_going
 
         if outcome == ""
           # Automatic sign in
-          user_name = name
-          access_token = token
+          access_token = sign_in_user(debug, client, name, password)
           signed_in = true
-          cursor = '(' + user_name + ')> '
+          cursor = '(' + name + ')> '
           past_step1 = false
           register_prompt = '3: Register as new user'
         else

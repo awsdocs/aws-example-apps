@@ -41,7 +41,7 @@ type Configuration struct {
 // Configuration
 var configuration Configuration
 
-func GetConfiguration() error {
+func SetConfiguration() error {
     var myError error
 
     if configuration == (Configuration{}) {
@@ -52,6 +52,13 @@ func GetConfiguration() error {
         err := decoder.Decode(&configuration)
 
         if err != nil {
+			// Set the values to something reasonable
+			configuration.Region = "us-west-2"
+			configuration.Timezone = "UTC"
+			configuration.MaxMessages = 20
+            configuration.RefreshSeconds = 30
+            configuration.Debug = false
+
             myError = errors.New("Error parsing config file: " + err.Error())
             return myError
         }
@@ -274,9 +281,13 @@ type userResponseBody struct {
 	Data   userResponseData `json:"data"`
 }
 
+type userResponseBodyFailureError struct {
+    Message string `json:"message"`
+}
+
 type userResponseBodyFailure struct {
 	Result string `json:"result"`
-	Error  string `json:"error"`
+	Error  userResponseBodyFailureError `json:"error"`
 }
 
 type userResponse struct {
@@ -313,7 +324,7 @@ func signInUser(userName string, password string) (string, error) {
 	result, err := svc.Invoke(&lambda.InvokeInput{FunctionName: aws.String("SignInCognitoUser"), Payload: payload})
 
 	if err != nil {
-		myError = errors.New("Error calling SignInCognitoUser")
+		myError = errors.New("Error calling SignInCognitoUser: " + err.Error())
 		return "", myError
 	}
 
@@ -332,8 +343,16 @@ func signInUser(userName string, password string) (string, error) {
 
 	// Did we not get a 200?
 	if resp.StatusCode != 200 {
-		myError = errors.New("Got a StatusCode: " + strconv.Itoa(resp.StatusCode))
-		return "", myError
+        var respFailure userResponseFailure
+        err = json.Unmarshal(result.Payload, &respFailure)
+
+        if err != nil {
+            myError = errors.New("Got status code: " + strconv.Itoa(resp.StatusCode) + " trying to sign in user")
+            return "", myError
+        } else {
+            myError = errors.New("Got error: " + respFailure.Body.Error.Message + " trying to sign in user")
+            return "", myError
+        }
 	}
 
 	if resp.Body.Result != "success" {
@@ -346,8 +365,8 @@ func signInUser(userName string, password string) (string, error) {
 			return "", myError
 		}
 
-		if respFailure.Body.Error != "" {
-			myError = errors.New("Failed to sign in Cognito user. Error: " + respFailure.Body.Error)
+		if respFailure.Body.Error.Message != "" {
+			myError = errors.New("Failed to sign in Cognito user. Error: " + respFailure.Body.Error.Message)
 			return "", myError
 		}
 
@@ -462,7 +481,7 @@ func deletePost(accessToken string, timestamp string) error {
 			return myError
 		}
 
-		myError = errors.New(respFailure.Body.Error)
+		myError = errors.New(respFailure.Body.Error.Message)
 		return myError
 	}
 
@@ -482,6 +501,25 @@ type finishSigninResponse struct {
 	StatusCode int                 `json:"statusCode"`
 	Headers    userResponseHeaders `json:"headers"`
 	Body       postResponseBody    `json:"body"`
+}
+
+type defaultHeaders struct {
+    ContentType string `json:"Content-Type"`
+}
+
+type defaultError struct {
+    Message string `json:"message"`
+}
+
+type defaultFailureBody struct {
+    Result string `json:"result"`
+    Error defaultError `json:"error"`
+}
+
+type defaultFailureResponse struct {
+    StatusCode int `json:"statusCode"`
+    Headers defaultHeaders `json:"headers"`
+    Body defaultFailureBody `json:"body"`
 }
 
 func postFromSignedInUser(accessToken string, message string) error {
@@ -524,8 +562,18 @@ func postFromSignedInUser(accessToken string, message string) error {
 
 	// Make sure we got a 200 and success
 	if resp.StatusCode != 200 {
-		myError = errors.New("Got unexpected status code: " + string(resp.StatusCode))
-		return myError
+		// Try to get the error
+        var respFailure defaultFailureResponse
+
+        err = json.Unmarshal(result.Payload, &respFailure)
+
+        if err != nil {
+            myError = errors.New("Got unexpected status code: " + strconv.Itoa(resp.StatusCode))
+            return myError
+        } else {
+            myError = errors.New("Message not posted: " + respFailure.Body.Error.Message)
+            return myError
+        }
 	}
 
 	if resp.Body.Result != "success" {
@@ -628,13 +676,11 @@ func startRegisterUser(name string, password string, email string) error {
 
 		err = json.Unmarshal(result.Payload, &resp)
 
-		if resp.StatusCode != 500 {
-			myError = errors.New("Expected a 500 status code, but got: " + string(resp.StatusCode))
-			return myError
-		}
-
-		if resp.Body.Error.Message != "" {
-			myError = errors.New(resp.Body.Error.Message)
+        if err != nil {
+            myError = errors.New("Could not register user")
+            return myError
+        } else {
+			myError = errors.New("Got status code: " + strconv.Itoa(resp.StatusCode) + " and error message: " +resp.Body.Error.Message)
 			return myError
 		}
 	}
@@ -942,7 +988,7 @@ func logInUser(scanner *bufio.Scanner) (logInUserResult, error) {
 	var result logInUserResult
 
 	// Get user name
-	name := getStringValue(scanner, "Enter a user name")
+	name := getStringValue(scanner, "Enter your user name")
 	fmt.Println("")
 	password := getStringValue(scanner, "Enter your password")
 	fmt.Println("")
@@ -956,7 +1002,7 @@ func logInUser(scanner *bufio.Scanner) (logInUserResult, error) {
 		result.userName = name
 		result.accessToken = token
 	} else {
-		myError = errors.New("Could not sign in user.\nEither the user does not exist or the password is incorrect.")
+		myError = errors.New("Could not sign in user: " + err.Error())
 	}
 
 	return result, myError
@@ -1042,6 +1088,7 @@ type resetPasswordResult struct {
 	cursor              string
 	pastStep1           bool
 	resetPasswordPrompt string
+    signedIn bool
 }
 
 func resetPassword(scanner *bufio.Scanner, pastStep1 bool, name string) (resetPasswordResult, error) {
@@ -1066,6 +1113,7 @@ func resetPassword(scanner *bufio.Scanner, pastStep1 bool, name string) (resetPa
 			result.cursor = "(" + name + ")> "
 			result.pastStep1 = false
 			result.resetPasswordPrompt = "4: Reset password"
+            result.signedIn = true
 
 			return result, myError
 		} else {
@@ -1073,7 +1121,7 @@ func resetPassword(scanner *bufio.Scanner, pastStep1 bool, name string) (resetPa
 			return result, myError
 		}
 	} else {
-		Debug.Println("Calling resetPassword")
+		Debug.Println("Calling startResetPassword")
 		Debug.Println("For user " + name)
 
 		err := startResetPassword(name)
@@ -1151,24 +1199,14 @@ func main() {
 	   of the object and display the error message if it exists.
 
 	*/
+    SetConfiguration()
 
-    regionPtr := flag.String("r", "us-west-2", "Region to look for services")
-    timezonePtr := flag.String("t", "UTC", "Timezone for displayed date and time")
-    maxMsgsPtr := flag.Int("n", 20, "Maximum number of messages to download")
-    refreshPtr := flag.Int("f", 30, "Duration, in seconds, between refreshing post list")
-    debugPtr := flag.Bool("d", false, "Whether to show debug output")
-    helpPtr := flag.Bool("h", false, "Show usage")
-
-    // Override default value if configuration is parsed correctly
-    err := GetConfiguration()
-
-    if err == nil {
-        regionPtr = flag.String("r", configuration.Region, "Region to look for services")
-        timezonePtr = flag.String("t", configuration.Timezone, "Timezone for displayed date and time")
-        maxMsgsPtr = flag.Int("n", configuration.MaxMessages, "Maximum number of messages to download")
-        refreshPtr = flag.Int("f", configuration.RefreshSeconds, "Duration, in seconds, between refreshing post list")
-        debugPtr = flag.Bool("d", configuration.Debug, "Whether to show debug output")
-    }
+	regionPtr := flag.String("r", configuration.Region, "Region to look for services")
+	timezonePtr := flag.String("t", configuration.Timezone, "Timezone for displayed date and time")
+	maxMsgsPtr := flag.Int("n", configuration.MaxMessages, "Maximum number of messages to download")
+	refreshPtr := flag.Int("f", configuration.RefreshSeconds, "Duration, in seconds, between refreshing post list")
+	debugPtr := flag.Bool("d", configuration.Debug, "Whether to show debug output")
+	helpPtr := flag.Bool("h", false, "Show usage")
 
     flag.Parse()
 
@@ -1299,7 +1337,7 @@ func main() {
 
 		case "4":
 			// Reset password
-			if !signedIn {
+			if !pastStep1 {
 				userName = getStringValue(scanner, "Enter your user name:")
 				fmt.Println("")
 			}
@@ -1310,6 +1348,9 @@ func main() {
 				cursor = result.cursor
 				pastStep1 = result.pastStep1
 				resetPasswordPrompt = result.resetPasswordPrompt
+                signedIn = result.signedIn
+			} else {
+				fmt.Println(err.Error())
 			}
 
 		case "5":
