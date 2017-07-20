@@ -1350,9 +1350,15 @@ func main() {
     http.HandleFunc("/register", RegisterServer)
     http.HandleFunc("/reset", ResetServer)
     http.HandleFunc("/unregister", UnregisterServer)
-    // Otherwise?
 
-    err = http.ListenAndServe(":12345", nil)
+	// Get port # from environemt or use 12345
+	port = os.Getenv("PORT")
+
+	if port == nil {
+		port = ":12345"
+	}
+
+    err = http.ListenAndServe(port, nil)
 
     if err != nil {
         log.Fatal("ListenAndServe returned error: ", err)
