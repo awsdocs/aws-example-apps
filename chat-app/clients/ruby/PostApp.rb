@@ -65,7 +65,7 @@ end
 
 def get_creds()
   begin
-    filename = 'C:\\Users\\dougsch\\.aws\\credentials'
+    filename = '/Users/soosung/.aws/credentials'
 
     creds = CredsProfile.new
 
