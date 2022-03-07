@@ -1,7 +1,0 @@
-{
-    "Region": "us-west-2",
-    "Timezone": "UTC",
-    "MaxMessages": 20,
-    "RefreshSeconds": 30,
-    "Debug": false
-}

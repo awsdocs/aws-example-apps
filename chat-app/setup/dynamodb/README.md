@@ -1,1 +1,0 @@
-For usage instructions, see the `README.md` file one level up in the `setup` folder.
